@@ -50,7 +50,7 @@ namespace GOFUS.Editor
             }
         }
 
-        private void ConfigureFor2D()
+        public void ConfigureFor2D()
         {
             EditorSettings.defaultBehaviorMode = EditorBehaviorMode.Mode2D;
 

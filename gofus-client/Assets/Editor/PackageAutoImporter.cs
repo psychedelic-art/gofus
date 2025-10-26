@@ -14,7 +14,7 @@ public class PackageAutoImporter
         Debug.Log("[GOFUS] Checking for required packages...");
 
         // Check if TextMeshPro is installed
-        if (!UnityEditor.PackageManager.PackageInfo.FindForAssetPath("Packages/com.unity.textmeshpro") == null)
+        if (UnityEditor.PackageManager.PackageInfo.FindForAssetPath("Packages/com.unity.textmeshpro") == null)
         {
             Debug.LogError("[GOFUS] TextMeshPro not found! Please install via Package Manager.");
         }

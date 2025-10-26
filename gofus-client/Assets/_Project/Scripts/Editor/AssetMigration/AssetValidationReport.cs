@@ -332,7 +332,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in sprites)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Sprite);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Sprite);
                     category.Assets.Add(asset);
                 }
 
@@ -341,7 +341,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in animations)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Animation);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Animation);
                     category.Assets.Add(asset);
                 }
             }
@@ -365,7 +365,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in tiles)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Sprite);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Sprite);
                     category.Assets.Add(asset);
                 }
             }
@@ -389,7 +389,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in uiElements)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Sprite);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Sprite);
                     category.Assets.Add(asset);
                 }
             }
@@ -413,7 +413,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in effects)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Effect);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Effect);
                     category.Assets.Add(asset);
                 }
             }
@@ -437,7 +437,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in audioClips)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Audio);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Audio);
                     category.Assets.Add(asset);
                 }
             }
@@ -461,7 +461,7 @@ namespace GOFUS.Editor.AssetMigration
                 foreach (var guid in monsters)
                 {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                    var asset = ValidateAsset(assetPath, AssetType.Sprite);
+                    var asset = ValidateAsset(assetPath, ValidationAssetType.Sprite);
                     category.Assets.Add(asset);
                 }
             }
@@ -470,7 +470,7 @@ namespace GOFUS.Editor.AssetMigration
             currentReport.Categories.Add(category);
         }
 
-        private AssetValidationEntry ValidateAsset(string path, AssetType type)
+        private AssetValidationEntry ValidateAsset(string path, ValidationAssetType type)
         {
             var entry = new AssetValidationEntry
             {
@@ -495,16 +495,16 @@ namespace GOFUS.Editor.AssetMigration
             // Type-specific validation
             switch (type)
             {
-                case AssetType.Sprite:
+                case ValidationAssetType.Sprite:
                     ValidateSprite(entry);
                     break;
-                case AssetType.Animation:
+                case ValidationAssetType.Animation:
                     ValidateAnimation(entry);
                     break;
-                case AssetType.Audio:
+                case ValidationAssetType.Audio:
                     ValidateAudio(entry);
                     break;
-                case AssetType.Effect:
+                case ValidationAssetType.Effect:
                     ValidateEffect(entry);
                     break;
             }
@@ -922,7 +922,7 @@ namespace GOFUS.Editor.AssetMigration
     {
         public string Path;
         public string Name;
-        public AssetType Type;
+        public ValidationAssetType Type;
         public bool IsValid;
         public long FileSize;
         public List<string> Issues = new List<string>();
@@ -946,7 +946,7 @@ namespace GOFUS.Editor.AssetMigration
         Monsters
     }
 
-    public enum AssetType
+    public enum ValidationAssetType
     {
         Sprite,
         Animation,

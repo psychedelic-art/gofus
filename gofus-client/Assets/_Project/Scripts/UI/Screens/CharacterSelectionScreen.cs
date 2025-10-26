@@ -7,7 +7,7 @@ using UnityEngine.UI;
 using UnityEngine.Networking;
 using TMPro;
 using GOFUS.Core;
-using GOFUS.Networking;
+using GOFUS.UI;
 
 namespace GOFUS.UI.Screens
 {
@@ -45,6 +45,12 @@ namespace GOFUS.UI.Screens
         [SerializeField] private TextMeshProUGUI selectedCharacterInfo;
         [SerializeField] private Image selectedCharacterPreview;
 
+        [Header("Backend Integration")]
+        private string backendUrl = "https://gofus-backend.vercel.app";
+        private string jwtToken;
+        private bool isLoading = false;
+        private TextMeshProUGUI statusText;
+
         // Properties
         public int MaxCharacterSlots => MAX_CHARACTERS;
         public List<CharacterSlot> CharacterSlots => characterSlots;
@@ -76,10 +82,32 @@ namespace GOFUS.UI.Screens
         public override void Initialize()
         {
             base.Initialize();
+
+            Debug.Log("[CharacterSelection] Initializing...");
+
+            // Get JWT token from PlayerPrefs (saved during login)
+            jwtToken = PlayerPrefs.GetString("jwt_token", "");
+            Debug.Log($"[CharacterSelection] JWT Token: {(string.IsNullOrEmpty(jwtToken) ? "MISSING" : "Found")}");
+
             characterSlots = new List<CharacterSlot>();
             loadedCharacters = new List<CharacterData>();
-            CreateUI();
+
+            try
+            {
+                CreateUI();
+                Debug.Log("[CharacterSelection] UI Created");
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[CharacterSelection] Error creating UI: {e.Message}");
+            }
+
             SetupEventHandlers();
+
+            // Load characters from backend
+            LoadCharactersFromBackend();
+
+            Debug.Log("[CharacterSelection] Initialization complete");
         }
 
         private void CreateUI()
@@ -191,10 +219,10 @@ namespace GOFUS.UI.Screens
                 new Vector2(0.85f, 0.85f), new Vector2(0.95f, 0.9f));
             refreshButton.onClick.AddListener(RequestRefresh);
 
-            // Back button
-            backButton = CreateButton("Back", parent,
+            // Back/Logout button
+            backButton = CreateButton("Logout", parent,
                 new Vector2(0.05f, 0.05f), new Vector2(0.15f, 0.1f));
-            backButton.onClick.AddListener(() => UIManager.Instance?.GoBack());
+            backButton.onClick.AddListener(OnLogoutClicked);
         }
 
         private Button CreateButton(string text, Transform parent, Vector2 anchorMin, Vector2 anchorMax)
@@ -297,12 +325,141 @@ namespace GOFUS.UI.Screens
             selectedCharacterInfo = infoObj.AddComponent<TextMeshProUGUI>();
             selectedCharacterInfo.fontSize = 14;
             selectedCharacterInfo.color = Color.white;
+            selectedCharacterInfo.alignment = TextAlignmentOptions.TopLeft;
+            selectedCharacterInfo.text = "Select a character to view details";
+
+            // Status text
+            GameObject statusObj = new GameObject("StatusText");
+            statusObj.transform.SetParent(parent, false);
+
+            RectTransform statusRect = statusObj.AddComponent<RectTransform>();
+            statusRect.anchorMin = new Vector2(0.2f, 0.02f);
+            statusRect.anchorMax = new Vector2(0.8f, 0.08f);
+            statusRect.offsetMin = Vector2.zero;
+            statusRect.offsetMax = Vector2.zero;
+
+            statusText = statusObj.AddComponent<TextMeshProUGUI>();
+            statusText.alignment = TextAlignmentOptions.Center;
+            statusText.fontSize = 14;
+            statusText.color = Color.yellow;
+            statusText.text = "";
         }
 
         private void SetupEventHandlers()
         {
             // Button handlers are set up in CreateControlButtons
         }
+
+        // ========== BACKEND API INTEGRATION ==========
+
+        private void LoadCharactersFromBackend()
+        {
+            if (string.IsNullOrEmpty(jwtToken))
+            {
+                SetStatus("No authentication token found", Color.red);
+                return;
+            }
+
+            StartCoroutine(LoadCharactersCoroutine());
+        }
+
+        private IEnumerator LoadCharactersCoroutine()
+        {
+            isLoading = true;
+            SetStatus("Loading characters...", Color.white);
+
+            string url = $"{backendUrl}/api/characters";
+
+            using (UnityWebRequest request = UnityWebRequest.Get(url))
+            {
+                request.SetRequestHeader("Authorization", $"Bearer {jwtToken}");
+                request.SetRequestHeader("Content-Type", "application/json");
+
+                yield return request.SendWebRequest();
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    string json = request.downloadHandler.text;
+                    CharacterListResponse response = JsonUtility.FromJson<CharacterListResponse>(json);
+
+                    LoadCharacters(ConvertToCharacterDataList(response.characters));
+                    SetStatus($"Loaded {response.characters.Length} character(s)", Color.green);
+                }
+                else
+                {
+                    SetStatus($"Failed to load characters: {request.error}", Color.red);
+                    Debug.LogError($"Load characters error: {request.error}");
+                }
+            }
+
+            isLoading = false;
+        }
+
+        private List<CharacterData> ConvertToCharacterDataList(BackendCharacter[] backendChars)
+        {
+            List<CharacterData> charList = new List<CharacterData>();
+
+            foreach (var bc in backendChars)
+            {
+                charList.Add(new CharacterData
+                {
+                    Id = bc.id,
+                    Name = bc.name,
+                    Level = bc.level,
+                    Class = GetClassName(bc.classId),
+                    Gender = bc.sex ? "Male" : "Female",
+                    LastPlayed = "Today", // TODO: Calculate from timestamp
+                    Experience = 0,
+                    MapId = bc.mapId
+                });
+            }
+
+            return charList;
+        }
+
+        private string GetClassName(int classId)
+        {
+            string[] classNames = { "Feca", "Osamodas", "Enutrof", "Sram", "Xelor", "Ecaflip",
+                                  "Eniripsa", "Iop", "Cra", "Sadida", "Sacrieur", "Pandawa" };
+
+            if (classId >= 1 && classId <= classNames.Length)
+            {
+                return classNames[classId - 1];
+            }
+
+            return "Unknown";
+        }
+
+        private void SetStatus(string message, Color color)
+        {
+            if (statusText != null)
+            {
+                statusText.text = message;
+                statusText.color = color;
+            }
+        }
+
+        // ========== BACKEND DATA CLASSES ==========
+
+        [Serializable]
+        private class BackendCharacter
+        {
+            public int id;
+            public string name;
+            public int level;
+            public int classId;
+            public bool sex;
+            public int mapId;
+            public int cellId;
+        }
+
+        [Serializable]
+        private class CharacterListResponse
+        {
+            public BackendCharacter[] characters;
+        }
+
+        // ========== ORIGINAL CHARACTER MANAGEMENT ==========
 
         public void LoadCharacters(List<CharacterData> characters)
         {
@@ -421,7 +578,17 @@ namespace GOFUS.UI.Screens
         {
             if (selectedCharacterId > 0)
             {
+                // Save selected character ID
+                PlayerPrefs.SetInt("selected_character_id", selectedCharacterId);
+                PlayerPrefs.Save();
+
+                SetStatus("Entering game world...", Color.green);
+                Debug.Log($"[CharacterSelection] Playing character ID: {selectedCharacterId}");
+
                 OnPlayCharacter?.Invoke(selectedCharacterId);
+
+                // TODO: Transition to game when GameHUD is ready
+                // UIManager.Instance.ShowScreen(ScreenType.GameHUD);
             }
         }
 
@@ -464,7 +631,23 @@ namespace GOFUS.UI.Screens
 
         public void RequestRefresh()
         {
+            LoadCharactersFromBackend();
             OnRefreshRequested?.Invoke();
+        }
+
+        private void OnLogoutClicked()
+        {
+            // Clear saved data
+            PlayerPrefs.DeleteKey("jwt_token");
+            PlayerPrefs.DeleteKey("account_id");
+            PlayerPrefs.DeleteKey("selected_character_id");
+            PlayerPrefs.Save();
+
+            SetStatus("Logging out...", Color.yellow);
+
+            // Go back to login
+            UIManager.Instance.ShowScreen(ScreenType.Login);
+            OnLogoutConfirmed?.Invoke();
         }
 
         private void UpdateButtonStates()

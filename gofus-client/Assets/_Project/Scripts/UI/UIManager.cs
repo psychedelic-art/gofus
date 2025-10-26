@@ -31,6 +31,29 @@ namespace GOFUS.UI
         public event Action<UIScreen> OnScreenShown;
         public event Action<UIScreen> OnScreenHidden;
 
+        protected override void Awake()
+        {
+            base.Awake();
+            Initialize();
+        }
+
+        private void Start()
+        {
+            // Show login screen on start - force immediate show without transitions
+            if (screens.ContainsKey(ScreenType.Login))
+            {
+                currentScreen = screens[ScreenType.Login];
+                currentScreen.Show();
+                OnScreenShown?.Invoke(currentScreen);
+                OnScreenChanged?.Invoke(ScreenType.Login);
+                Debug.Log("[UIManager] LoginScreen shown on start");
+            }
+            else
+            {
+                Debug.LogError("[UIManager] LoginScreen not found in screens dictionary!");
+            }
+        }
+
         public void Initialize()
         {
             screens = new Dictionary<ScreenType, UIScreen>();
@@ -82,12 +105,18 @@ namespace GOFUS.UI
         {
             // Create all UI screens
             CreateScreen<LoginScreen>(ScreenType.Login);
-            CreateScreen<MainMenuScreen>(ScreenType.MainMenu);
+
+            // TODO: Uncomment these as you create the screen classes
+            // CreateScreen<MainMenuScreen>(ScreenType.MainMenu);
             CreateScreen<CharacterSelectionScreen>(ScreenType.CharacterSelection);
-            CreateScreen<GameHUD>(ScreenType.GameHUD);
-            CreateScreen<EnhancedInventoryUI>(ScreenType.Inventory);
-            CreateScreen<CompleteSettingsMenu>(ScreenType.Settings);
-            CreateScreen<FullChatSystem>(ScreenType.Chat);
+
+            // These screens already exist - only create if they compile without errors
+            // For now, commenting them out to focus on LoginScreen
+            // CreateScreen<GameHUD>(ScreenType.GameHUD);
+            // CreateScreen<EnhancedInventoryUI>(ScreenType.Inventory);
+            // CreateScreen<CompleteSettingsMenu>(ScreenType.Settings);
+            // CreateScreen<FullChatSystem>(ScreenType.Chat);
+
             // TODO: Create LoadingScreen class
             // CreateScreen<LoadingScreen>(ScreenType.Loading);
         }
@@ -376,4 +405,22 @@ namespace GOFUS.UI
             UIManager.Instance.GoBack();
         }
     }
+
+    #if UNITY_EDITOR || UNITY_INCLUDE_TESTS
+    // Test helper extensions for UIManager
+    public static class UIManagerTestExtensions
+    {
+        public static ScreenType GetCurrentScreen(this UIManager manager)
+        {
+            var currentScreenField = typeof(UIManager).GetField("currentScreen", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var screen = currentScreenField?.GetValue(manager) as UIScreen;
+            return screen != null ? screen.ScreenType : ScreenType.Login;
+        }
+
+        public static void TransitionTo(this UIManager manager, ScreenType screenType)
+        {
+            manager.ShowScreen(screenType);
+        }
+    }
+    #endif
 }

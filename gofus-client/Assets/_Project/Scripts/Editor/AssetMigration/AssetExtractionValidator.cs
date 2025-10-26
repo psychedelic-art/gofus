@@ -331,7 +331,7 @@ namespace GOFUS.Editor.AssetMigration
                     var spriteFiles = Directory.GetFiles(dir, "*.png");
                     if (spriteFiles.Length < 16) // Minimum for idle and walk in 8 directions
                     {
-                        category.warnings.Add($"{className} has only {spriteFiles.Length} sprites (expected at least 16)");
+                        category.missingItems.Add($"{className} has only {spriteFiles.Length} sprites (expected at least 16)");
                     }
                 }
 

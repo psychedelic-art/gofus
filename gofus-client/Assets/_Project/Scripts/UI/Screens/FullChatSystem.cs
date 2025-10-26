@@ -1073,20 +1073,3 @@ namespace GOFUS.UI.Screens
         #endregion
     }
 }
-
-namespace GOFUS.Chat
-{
-    public enum ChatChannel
-    {
-        General,
-        Party,
-        Guild,
-        Trade,
-        System,
-        Whisper,
-        Alliance,
-        Recruitment,
-        Combat
-    }
-
-}

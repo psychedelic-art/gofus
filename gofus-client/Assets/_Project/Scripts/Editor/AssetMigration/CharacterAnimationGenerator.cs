@@ -367,7 +367,8 @@ namespace GOFUS.Editor.AssetMigration
         {
             AddLog("Creating combat layer...");
 
-            var combatLayer = generatedController.AddLayer("Combat");
+            generatedController.AddLayer("Combat");
+            var combatLayer = generatedController.layers[generatedController.layers.Length - 1];
             combatLayer.defaultWeight = 1;
             var stateMachine = combatLayer.stateMachine;
 
@@ -391,7 +392,8 @@ namespace GOFUS.Editor.AssetMigration
         {
             AddLog("Creating emote layer...");
 
-            var emoteLayer = generatedController.AddLayer("Emotes");
+            generatedController.AddLayer("Emotes");
+            var emoteLayer = generatedController.layers[generatedController.layers.Length - 1];
             emoteLayer.defaultWeight = 1;
             var stateMachine = emoteLayer.stateMachine;
 

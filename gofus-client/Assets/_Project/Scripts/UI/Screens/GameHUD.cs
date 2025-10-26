@@ -4,6 +4,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using GOFUS.Combat;
+using GOFUS.Map;
+using GOFUS.Entities;
 
 namespace GOFUS.UI.Screens
 {
@@ -48,7 +50,7 @@ namespace GOFUS.UI.Screens
         private const float EDGE_DETECTION_DISTANCE = 10f;
 
         // Combat Mode
-        public CombatMode CurrentCombatMode { get; private set; } = CombatMode.None;
+        public CombatMode? CurrentCombatMode { get; private set; } = null;
         public string CombatModeText { get; private set; } = "Exploration";
         public float ATBProgress { get; private set; }
         public bool IsATBVisible => CurrentCombatMode == CombatMode.RealTime;
@@ -779,24 +781,12 @@ namespace GOFUS.UI.Screens
     {
         public int Id;
         public Vector2 Position;
-        public EntityType Type;
+        public GOFUS.Entities.EntityType Type;
     }
 
-    public enum EntityType
-    {
-        Player, NPC, Monster, Item, Quest
-    }
-
-    public enum MapEdge
-    {
-        None, Top, Bottom, Left, Right,
-        TopLeft, TopRight, BottomLeft, BottomRight
-    }
-
-    public enum CombatMode
-    {
-        None, TurnBased, RealTime
-    }
+    // Using EntityType from GOFUS.Entities namespace
+    // Using MapEdge from GOFUS.Map namespace
+    // Using CombatMode from GOFUS.Combat namespace
 
     public class QuickSkill
     {

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEditor;
-using UnityEditor.U2D.Sprites;
+// using UnityEditor.U2D.Sprites; // This namespace may not be available in all Unity versions
 
 namespace GOFUS.Editor.AssetMigration
 {

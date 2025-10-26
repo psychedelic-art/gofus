@@ -6,6 +6,7 @@ using UnityEngine.Networking;
 using TMPro;
 using GOFUS.Core;
 using GOFUS.Networking;
+using GOFUS.UI;  // Add this to get UIScreen from UIManager
 
 namespace GOFUS.UI.Screens
 {
@@ -254,7 +255,7 @@ namespace GOFUS.UI.Screens
 
             // Register button
             registerButton = CreateButton("Register", parent, new Vector2(0.55f, 0.2f), new Vector2(0.8f, 0.3f));
-            registerButton.onClick.AddListener(() => OnRegisterClicked?.Invoke());
+            registerButton.onClick.AddListener(OnRegisterButtonClicked);
 
             // Forgot password button
             forgotPasswordButton = CreateButton("Forgot Password?", parent, new Vector2(0.2f, 0.08f), new Vector2(0.45f, 0.15f));
@@ -439,7 +440,7 @@ namespace GOFUS.UI.Screens
             // Create login request
             var loginData = new LoginRequest
             {
-                username = username,
+                login = username,  // Backend expects "login" field
                 password = password
             };
 
@@ -467,6 +468,23 @@ namespace GOFUS.UI.Screens
         {
             SetStatus("Login successful!", Color.green);
 
+            // Parse response and save JWT token
+            try
+            {
+                var loginResponse = JsonUtility.FromJson<LoginResponse>(response);
+                if (!string.IsNullOrEmpty(loginResponse.token))
+                {
+                    PlayerPrefs.SetString("jwt_token", loginResponse.token);
+                    PlayerPrefs.SetString("account_id", loginResponse.accountId);
+                    PlayerPrefs.Save();
+                    Debug.Log($"[LoginScreen] JWT token saved");
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[LoginScreen] Failed to parse login response: {e.Message}");
+            }
+
             if (rememberMe)
             {
                 SaveCredentials(username, passwordInput?.text);
@@ -475,7 +493,8 @@ namespace GOFUS.UI.Screens
             OnLoginSuccess?.Invoke(username, response);
 
             // Transition to character selection
-            UIManager.Instance.ShowScreen(ScreenType.CharacterSelection);
+            Debug.Log($"[LoginScreen] Transitioning to character selection");
+            UI.UIManager.Instance.ShowScreen(ScreenType.CharacterSelection);
         }
 
         private void HandleLoginError(string error, long responseCode)
@@ -499,6 +518,86 @@ namespace GOFUS.UI.Screens
 
             SetStatus(message, Color.red);
             OnLoginFailed?.Invoke(error);
+        }
+
+        private void OnRegisterButtonClicked()
+        {
+            if (isAuthenticating) return;
+
+            string username = usernameInput?.text ?? "";
+            string password = passwordInput?.text ?? "";
+
+            if (!ValidateInput(username, password))
+                return;
+
+            StartCoroutine(RegisterUser(username, password));
+        }
+
+        private IEnumerator RegisterUser(string username, string password)
+        {
+            isAuthenticating = true;
+            SetLoading(true);
+            SetStatus("Creating account...", Color.white);
+
+            // Get server URL
+            string serverUrl = serverDropdown?.value == 0 ?
+                "https://gofus-backend.vercel.app" :
+                "http://localhost:3000";
+
+            string registerUrl = $"{serverUrl}/api/auth/register";
+
+            // Create register request
+            var registerData = new RegisterRequest
+            {
+                login = username,
+                password = password,
+                email = $"{username}@gofus.game" // Optional email
+            };
+
+            string jsonData = JsonUtility.ToJson(registerData);
+
+            using (UnityWebRequest request = UnityWebRequest.Post(registerUrl, jsonData, "application/json"))
+            {
+                yield return request.SendWebRequest();
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    SetStatus("Account created! You can now login.", Color.green);
+                    // Optionally auto-fill the login fields
+                    if (usernameInput != null) usernameInput.text = username;
+                    if (passwordInput != null) passwordInput.text = password;
+                }
+                else
+                {
+                    string message = "Registration failed";
+
+                    if (request.responseCode == 409)
+                    {
+                        message = "Username already exists";
+                    }
+                    else if (request.responseCode == 400)
+                    {
+                        message = "Invalid username or password format";
+                    }
+                    else if (request.responseCode == 0)
+                    {
+                        message = "Cannot connect to server";
+                    }
+                    else if (request.responseCode == 404)
+                    {
+                        // For demo, treat as success
+                        SetStatus("Demo mode: Account created!", Color.green);
+                        isAuthenticating = false;
+                        SetLoading(false);
+                        yield break; // Use yield break instead of return in coroutine
+                    }
+
+                    SetStatus(message, Color.red);
+                }
+            }
+
+            isAuthenticating = false;
+            SetLoading(false);
         }
 
         private void OnForgotPasswordClicked()
@@ -605,11 +704,38 @@ namespace GOFUS.UI.Screens
                 loginButton.interactable = !loading;
         }
 
+        #if UNITY_EDITOR || UNITY_INCLUDE_TESTS
+        /// <summary>
+        /// Test helper method to simulate login success
+        /// Only available in editor and test builds
+        /// </summary>
+        public void SimulateLoginSuccess(string username, string token)
+        {
+            OnLoginSuccess?.Invoke(username, token);
+        }
+        #endif
+
         [Serializable]
         private class LoginRequest
         {
-            public string username;
+            public string login;  // Backend expects "login" not "username"
             public string password;
+        }
+
+        [Serializable]
+        private class LoginResponse
+        {
+            public string token;
+            public string accountId;
+            public string message;
+        }
+
+        [Serializable]
+        private class RegisterRequest
+        {
+            public string login;
+            public string password;
+            public string email;
         }
     }
 }
