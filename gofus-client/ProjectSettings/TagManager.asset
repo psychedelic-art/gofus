@@ -1,0 +1,76 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!78 &1
+TagManager:
+  serializedVersion: 3
+  tags:
+  - Enemy
+  - NPC
+  - Ground
+  - Wall
+  - Interactive
+  - Pickup
+  - Teleport
+  layers:
+  - Default
+  - TransparentFX
+  - Ignore Raycast
+  - 
+  - Water
+  - UI
+  - Ground
+  - Player
+  - Enemy
+  - NPC
+  - Obstacle
+  - Interactive
+  - Effects
+  - Projectile
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  - 
+  m_SortingLayers:
+  - name: Default
+    uniqueID: 0
+    locked: 0
+  - name: Background
+    uniqueID: 3104027879
+    locked: 0
+  - name: Ground
+    uniqueID: 3700444659
+    locked: 0
+  - name: GroundDecoration
+    uniqueID: 2256324371
+    locked: 0
+  - name: Objects
+    uniqueID: 1730298383
+    locked: 0
+  - name: Characters
+    uniqueID: 2952865719
+    locked: 0
+  - name: Effects
+    uniqueID: 3552297405
+    locked: 0
+  - name: UI
+    uniqueID: 855568237
+    locked: 0
+  - name: UIOverlay
+    uniqueID: 433869103
+    locked: 0
+  m_RenderingLayers:
+  - Default

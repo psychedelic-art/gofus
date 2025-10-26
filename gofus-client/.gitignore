@@ -16,7 +16,7 @@
 [Aa]ssets/_Project/[Tt]ests.meta
 
 # Library subfolders to ignore
-[Ll]ibrary/[Pp]ackage[Cc]ache/**
+[Ll]ibrary/[Pp]ackage[Cc]ache/
 [Ll]ibrary/[Aa]rtifacts/
 [Ll]ibrary/[Ss]cript[Aa]ssemblies/
 [Ll]ibrary/[Ss]cript[Mm]apper/
