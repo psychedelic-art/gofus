@@ -1,0 +1,33 @@
+# Main GOFUS Project .gitignore
+# Each subproject has its own .gitignore for specific exclusions
+
+# Ignore compiled Java classes
+*.class
+/Cliente retro/**
+/Codigo fuente, sources (src) y libs de Game/
+/Lang retro/
+
+# Ignore IDE-specific files
+.idea/
+.vscode/
+.DS_Store
+
+# OS generated files
+Thumbs.db
+*.swp
+*.swo
+*~
+
+/Cliente2/*
+"Cliente retro"/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Node modules from legacy client
+"Cliente retro/resources/app/node_modules/"
+
+# Temporary files
+nul

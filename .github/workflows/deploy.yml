@@ -1,0 +1,222 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'gofus-backend/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  NODE_VERSION: '20.x'
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ steps.deploy.outputs.url }}
+
+    defaults:
+      run:
+        working-directory: ./gofus-backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: gofus-backend/package-lock.json
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+            vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        continue-on-error: false
+
+      - name: Build Project Artifacts
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+            vercel build --token=${{ secrets.VERCEL_TOKEN }}
+          else
+            vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          fi
+
+      - name: Deploy to Vercel
+        id: deploy
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "staging" ]]; then
+            URL=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          else
+            URL=$(vercel deploy --prod --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
+          fi
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "Deployed to: $URL"
+
+      - name: Wait for deployment to be ready
+        run: sleep 30
+
+      - name: Health Check
+        run: |
+          MAX_RETRIES=5
+          RETRY_COUNT=0
+          HEALTH_URL="${{ steps.deploy.outputs.url }}/api/health"
+
+          echo "Checking health at: $HEALTH_URL"
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✓ Health check passed!"
+              exit 0
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Health check failed (attempt $RETRY_COUNT/$MAX_RETRIES). HTTP Code: $HTTP_CODE"
+
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "Waiting 10 seconds before retry..."
+              sleep 10
+            fi
+          done
+
+          echo "✗ Health check failed after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Run smoke tests
+        run: |
+          BASE_URL="${{ steps.deploy.outputs.url }}"
+
+          # Test API endpoints
+          echo "Testing API endpoints..."
+
+          # Test auth endpoints
+          curl -f "$BASE_URL/api/auth/register" -X OPTIONS || echo "Auth endpoint check failed"
+
+          echo "✓ Smoke tests completed"
+        continue-on-error: true
+
+      - name: Create deployment summary
+        if: always()
+        run: |
+          echo "### Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ github.event.inputs.environment || 'production' }}" >> $GITHUB_STEP_SUMMARY
+          echo "**URL:** ${{ steps.deploy.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed at:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  rollback:
+    name: Rollback on Failure
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    defaults:
+      run:
+        working-directory: ./gofus-backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Get previous deployment
+        id: previous
+        run: |
+          PREV_URL=$(vercel ls --token=${{ secrets.VERCEL_TOKEN }} | grep -A 1 "READY" | tail -n 1 | awk '{print $1}')
+          echo "previous_url=$PREV_URL" >> $GITHUB_OUTPUT
+
+      - name: Promote previous deployment
+        if: steps.previous.outputs.previous_url != ''
+        run: |
+          vercel promote ${{ steps.previous.outputs.previous_url }} --token=${{ secrets.VERCEL_TOKEN }}
+          echo "Rolled back to: ${{ steps.previous.outputs.previous_url }}"
+
+      - name: Notify rollback
+        if: always()
+        run: |
+          echo "### Rollback Executed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** Deployment failed health checks" >> $GITHUB_STEP_SUMMARY
+          echo "**Previous URL:** ${{ steps.previous.outputs.previous_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Time:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: always()
+
+    steps:
+      - name: Deployment Status
+        run: |
+          if [[ "${{ needs.deploy.result }}" == "success" ]]; then
+            echo "✓ Deployment successful!"
+          else
+            echo "✗ Deployment failed!"
+            exit 1
+          fi
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ needs.deploy.result }}' === 'success' ? '✓' : '✗';
+            const message = `### ${status} Deployment ${status === '✓' ? 'Successful' : 'Failed'}
+
+            **Environment:** ${{ github.event.inputs.environment || 'production' }}
+            **Commit:** ${{ github.sha }}
+            **Branch:** ${{ github.ref_name }}
+            `;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
