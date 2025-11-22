@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using GOFUS.Core;
+using GOFUS.Rendering;
 
 namespace GOFUS.Player
 {
@@ -26,6 +27,9 @@ namespace GOFUS.Player
         [Header("Sprite References")]
         [SerializeField] private SpriteRenderer spriteRenderer;
         [SerializeField] private Dictionary<string, Sprite[]> animationSprites;
+
+        // Integration with CharacterLayerRenderer
+        private CharacterLayerRenderer characterRenderer;
 
         // Animation timing
         private float animationTimer;
@@ -60,6 +64,22 @@ namespace GOFUS.Player
                 }
             }
 
+            // Get CharacterLayerRenderer for sprite animation
+            characterRenderer = GetComponent<CharacterLayerRenderer>();
+            if (characterRenderer == null)
+            {
+                characterRenderer = GetComponentInChildren<CharacterLayerRenderer>();
+            }
+
+            if (characterRenderer != null)
+            {
+                Debug.Log("[PlayerAnimator] CharacterLayerRenderer found!");
+            }
+            else
+            {
+                Debug.LogWarning("[PlayerAnimator] CharacterLayerRenderer not found! Sprite animations won't work.");
+            }
+
             animationSprites = new Dictionary<string, Sprite[]>();
             LoadAnimationSprites();
         }
@@ -72,10 +92,12 @@ namespace GOFUS.Player
 
         private void Update()
         {
-            if (useSpritesheetAnimation)
+            if (useSpritesheetAnimation && animationSprites.Count > 0)
             {
                 UpdateSpritesheetAnimation();
             }
+
+            // CharacterLayerRenderer handles sprite updates automatically
         }
 
         private void LoadAnimationSprites()
@@ -95,6 +117,7 @@ namespace GOFUS.Player
             if (currentDirection != direction)
             {
                 currentDirection = direction;
+                Debug.Log($"[PlayerAnimator] SetDirection({direction})");
                 UpdateAnimation();
             }
         }
@@ -105,6 +128,7 @@ namespace GOFUS.Player
             {
                 isMoving = moving;
                 currentState = moving ? AnimationState.Walk : AnimationState.Idle;
+                Debug.Log($"[PlayerAnimator] SetMoving({moving}) - State changed to {currentState}");
                 UpdateAnimation();
             }
         }
@@ -228,6 +252,18 @@ namespace GOFUS.Player
                 animationTimer = 0;
                 LoadAnimationFrames(animKey);
             }
+
+            // Apply animation to CharacterLayerRenderer
+            if (characterRenderer != null)
+            {
+                string characterAnimName = ConvertToCharacterAnimation(currentState, currentDirection);
+                characterRenderer.SetAnimation(characterAnimName);
+                Debug.Log($"[PlayerAnimator] Set CharacterLayerRenderer animation: {characterAnimName}");
+            }
+            else
+            {
+                Debug.Log($"[PlayerAnimator] Animation updated: state={currentState}, direction={currentDirection} (no CharacterLayerRenderer)");
+            }
         }
 
         private string BuildAnimationKey(AnimationState state, PlayerDirection direction)
@@ -250,6 +286,117 @@ namespace GOFUS.Player
                 case PlayerDirection.West: return "west";
                 case PlayerDirection.NorthWest: return "northwest";
                 default: return "south";
+            }
+        }
+
+        /// <summary>
+        /// Convert PlayerAnimator state to CharacterLayerRenderer animation name
+        /// Format: {state}{direction} where state is static/walk/run and direction is S/N/E/W/SE/SW/NE/NW
+        /// </summary>
+        private string ConvertToCharacterAnimation(AnimationState state, PlayerDirection direction)
+        {
+            // Map animation state to prefix
+            string statePrefix;
+            switch (state)
+            {
+                case AnimationState.Idle:
+                    statePrefix = "static";
+                    break;
+                case AnimationState.Walk:
+                    statePrefix = "walk";
+                    break;
+                case AnimationState.Run:
+                    statePrefix = "run";
+                    break;
+                case AnimationState.Attack:
+                case AnimationState.Cast:
+                case AnimationState.Death:
+                case AnimationState.Hit:
+                case AnimationState.Victory:
+                    // For now, default to static for unsupported states
+                    statePrefix = "static";
+                    break;
+                default:
+                    statePrefix = "static";
+                    break;
+            }
+
+            // Map direction to suffix
+            string directionSuffix;
+            switch (direction)
+            {
+                case PlayerDirection.North:
+                    directionSuffix = "N";
+                    break;
+                case PlayerDirection.NorthEast:
+                    directionSuffix = "NE";
+                    break;
+                case PlayerDirection.East:
+                    directionSuffix = "E";
+                    break;
+                case PlayerDirection.SouthEast:
+                    directionSuffix = "SE";
+                    break;
+                case PlayerDirection.South:
+                    directionSuffix = "S";
+                    break;
+                case PlayerDirection.SouthWest:
+                    directionSuffix = "SW";
+                    break;
+                case PlayerDirection.West:
+                    directionSuffix = "W";
+                    break;
+                case PlayerDirection.NorthWest:
+                    directionSuffix = "NW";
+                    break;
+                default:
+                    directionSuffix = "S";
+                    break;
+            }
+
+            return statePrefix + directionSuffix;
+        }
+
+        /// <summary>
+        /// Apply visual feedback to show direction and movement state (temporary until sprites are loaded)
+        /// </summary>
+        private void ApplyVisualFeedback()
+        {
+            if (spriteRenderer == null)
+                return;
+
+            // Color-code by direction for visual feedback
+            Color directionColor = GetDirectionColor(currentDirection);
+
+            // Brighten/darken based on movement state
+            float intensity = isMoving ? 1.0f : 0.7f;
+            spriteRenderer.color = directionColor * intensity;
+
+            // Flip sprite for left-facing directions
+            bool shouldFlipX = (currentDirection == PlayerDirection.West ||
+                               currentDirection == PlayerDirection.NorthWest ||
+                               currentDirection == PlayerDirection.SouthWest);
+            spriteRenderer.flipX = shouldFlipX;
+
+            Debug.Log($"[PlayerAnimator] Visual feedback: direction={currentDirection}, color={directionColor}, moving={isMoving}, flipX={shouldFlipX}");
+        }
+
+        /// <summary>
+        /// Get color for direction (temporary visual indicator)
+        /// </summary>
+        private Color GetDirectionColor(PlayerDirection direction)
+        {
+            switch (direction)
+            {
+                case PlayerDirection.North:      return new Color(1.0f, 0.3f, 0.3f); // Red
+                case PlayerDirection.NorthEast:  return new Color(1.0f, 0.7f, 0.3f); // Orange
+                case PlayerDirection.East:       return new Color(1.0f, 1.0f, 0.3f); // Yellow
+                case PlayerDirection.SouthEast:  return new Color(0.3f, 1.0f, 0.3f); // Green
+                case PlayerDirection.South:      return new Color(0.3f, 0.7f, 1.0f); // Blue
+                case PlayerDirection.SouthWest:  return new Color(0.7f, 0.3f, 1.0f); // Purple
+                case PlayerDirection.West:       return new Color(1.0f, 0.3f, 0.7f); // Pink
+                case PlayerDirection.NorthWest:  return new Color(0.3f, 1.0f, 1.0f); // Cyan
+                default:                         return Color.white;
             }
         }
 

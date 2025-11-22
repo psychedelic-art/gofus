@@ -58,21 +58,43 @@ namespace GOFUS.Combat
 
         public List<int> FindPath(int startCell, int endCell)
         {
+            Debug.Log($"[AStarPathfinder] ===== FindPath ENTERED: start={startCell}, end={endCell} =====");
             var startTime = Time.realtimeSinceStartup;
 
             try
             {
                 // Validation
+                Debug.Log($"[AStarPathfinder] Checking cell validity...");
                 if (!IsValidCell(startCell) || !IsValidCell(endCell))
+                {
+                    Debug.Log($"[AStarPathfinder] Invalid cell: start={startCell} (valid={IsValidCell(startCell)}), end={endCell} (valid={IsValidCell(endCell)})");
                     return null;
+                }
 
                 // Same cell - return empty path
                 if (startCell == endCell)
+                {
+                    Debug.Log($"[AStarPathfinder] Start and end are same cell ({startCell}), returning empty path");
                     return new List<int>();
+                }
 
                 // Check if start or end is unwalkable
-                if (!IsWalkable(startCell) || !IsWalkable(endCell))
+                Debug.Log($"[AStarPathfinder] Checking walkability...");
+                if (!IsWalkable(startCell))
+                {
+                    var startCellData = grid.Cells[startCell];
+                    Debug.Log($"[AStarPathfinder] Start cell {startCell} is NOT WALKABLE! IsWalkable={startCellData.IsWalkable}, IsOccupied={startCellData.IsOccupied}");
                     return null;
+                }
+
+                if (!IsWalkable(endCell))
+                {
+                    var endCellData = grid.Cells[endCell];
+                    Debug.Log($"[AStarPathfinder] End cell {endCell} is NOT WALKABLE! IsWalkable={endCellData.IsWalkable}, IsOccupied={endCellData.IsOccupied}");
+                    return null;
+                }
+
+                Debug.Log($"[AStarPathfinder] Both cells are walkable, proceeding to A* search...");
 
                 // Check cache
                 if (IsCachingEnabled)
@@ -98,6 +120,11 @@ namespace GOFUS.Combat
                 PathsCalculated++;
                 LastPathfindingTime = Time.realtimeSinceStartup - startTime;
                 return path;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[AStarPathfinder] EXCEPTION in FindPath: {ex.Message}\n{ex.StackTrace}");
+                return null;
             }
             finally
             {
@@ -176,6 +203,7 @@ namespace GOFUS.Combat
             }
 
             // No path found
+            Debug.Log($"[AStarPathfinder] NO PATH FOUND from {startCell} to {endCell}! Searched {nodesSearched} nodes.");
             return null;
         }
 

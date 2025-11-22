@@ -6,6 +6,8 @@
 /Cliente retro/**
 /Codigo fuente, sources (src) y libs de Game/
 /Lang retro/
+/gofus-client/Assets/_Project/Resources/**
+/lang
 
 # Ignore IDE-specific files
 .idea/

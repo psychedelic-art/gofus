@@ -109,10 +109,12 @@ namespace GOFUS.UI
             // TODO: Uncomment these as you create the screen classes
             // CreateScreen<MainMenuScreen>(ScreenType.MainMenu);
             CreateScreen<CharacterSelectionScreen>(ScreenType.CharacterSelection);
+            CreateScreen<CharacterCreationScreen>(ScreenType.CharacterCreation);
 
-            // These screens already exist - only create if they compile without errors
-            // For now, commenting them out to focus on LoginScreen
-            // CreateScreen<GameHUD>(ScreenType.GameHUD);
+            // Create GameHUD - essential for gameplay
+            CreateScreen<GameHUD>(ScreenType.GameHUD);
+
+            // TODO: Create these screens as needed
             // CreateScreen<EnhancedInventoryUI>(ScreenType.Inventory);
             // CreateScreen<CompleteSettingsMenu>(ScreenType.Settings);
             // CreateScreen<FullChatSystem>(ScreenType.Chat);
@@ -291,6 +293,7 @@ namespace GOFUS.UI
         Login,
         MainMenu,
         CharacterSelection,
+        CharacterCreation,
         GameHUD,
         Inventory,
         Settings,

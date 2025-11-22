@@ -1,0 +1,48 @@
+<rss version="2.1">
+<channel>
+<title>Name</title>
+<copyright>Copyright 2013 Ankama-Games.com</copyright> //esto igual puedes modificar
+<lastBuildDate>Mon, 15 November 2021 17:59:59 +0200</lastBuildDate> //puedes modificar la fecha
+
+<item>
+<guid>1</guid>
+<title>Noticia sobre la shop</title>
+<link>http://link</link> // aqui puedes poner el link sobre tu pagina donde pondras noticias y al dar clic te llevara a la pagina en el navegador
+<icon>News_Shop</icon> // id de noticias de shop
+<pubDate>Jour, 15 Mois année 02:45</pubDate> //aqui puedes modificar la fecha actual de la noticia
+</item>
+
+<item>
+<guid>2</guid>
+<title>¡Checa nuestro discord de emulación!</title>
+<link>https://discord.gg/3m3zeywgrm</link>
+<icon>News_News</icon> //id de noticias nuevas
+<pubDate>Lunes, 22 Noviembre 2021 12:27 p.m.</pubDate>
+</item>
+
+<item>
+<guid>3</guid>
+<title>Noticia de mantenimiento</title>
+<link>http://www.dofus.com/fr</link>
+<icon>News_maintenance</icon> // id de noticias de mantenimiento
+<pubDate>Mon, 15 November 2021 02:51</pubDate>
+</item>
+
+<item>
+<guid>4</guid>
+<title>Noticia de actualizaciones</title>
+<link>http://www.dofus.com/fr</link>
+<icon>News_Update_fr</icon> // id de actualizaciones
+<pubDate>Mon, 15 November 2021 02:59</pubDate>
+</item>
+
+<item>
+<guid>5</guid>
+<title>Noticia de eventos</title>
+<link>http://www.dofus.com/fr</link>
+<icon>News_Event</icon> // id de eventos
+<pubDate>Mon, 15 November 2021 02:59</pubDate>
+</item>
+
+</channel>
+</rss>

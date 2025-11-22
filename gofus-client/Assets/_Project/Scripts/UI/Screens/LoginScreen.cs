@@ -468,22 +468,42 @@ namespace GOFUS.UI.Screens
         {
             SetStatus("Login successful!", Color.green);
 
+            Debug.Log($"[LoginScreen] Full response: {response}");
+
             // Parse response and save JWT token
             try
             {
                 var loginResponse = JsonUtility.FromJson<LoginResponse>(response);
-                if (!string.IsNullOrEmpty(loginResponse.token))
+                if (loginResponse != null && !string.IsNullOrEmpty(loginResponse.token))
                 {
                     PlayerPrefs.SetString("jwt_token", loginResponse.token);
-                    PlayerPrefs.SetString("account_id", loginResponse.accountId);
+                    if (!string.IsNullOrEmpty(loginResponse.accountId))
+                    {
+                        PlayerPrefs.SetString("account_id", loginResponse.accountId);
+                    }
                     PlayerPrefs.Save();
-                    Debug.Log($"[LoginScreen] JWT token saved");
+                    Debug.Log($"[LoginScreen] JWT token saved: {loginResponse.token.Substring(0, 20)}...");
+                }
+                else
+                {
+                    Debug.LogWarning("[LoginScreen] Login response missing token, using raw response");
+                    // Fallback: treat entire response as token (for demo/testing)
+                    PlayerPrefs.SetString("jwt_token", response);
+                    PlayerPrefs.Save();
                 }
             }
             catch (System.Exception e)
             {
                 Debug.LogError($"[LoginScreen] Failed to parse login response: {e.Message}");
+                Debug.LogError($"[LoginScreen] Response was: {response}");
+                // Fallback: save raw response
+                PlayerPrefs.SetString("jwt_token", response);
+                PlayerPrefs.Save();
             }
+
+            // Verify token was saved
+            string savedToken = PlayerPrefs.GetString("jwt_token", "");
+            Debug.Log($"[LoginScreen] Token verification - saved: {!string.IsNullOrEmpty(savedToken)}");
 
             if (rememberMe)
             {

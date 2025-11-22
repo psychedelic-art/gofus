@@ -44,10 +44,23 @@ namespace GOFUS.UI.Screens
 
         // Map Transitions
         public int CurrentMapId { get; private set; }
+        public int CurrentCellId { get; private set; }
         public int PreloadingMapId { get; private set; }
         public Dictionary<MapEdge, int> AdjacentMaps { get; private set; } = new Dictionary<MapEdge, int>();
         private Vector2 playerVelocity;
         private const float EDGE_DETECTION_DISTANCE = 10f;
+
+        // Map Rendering
+        private MapRenderer mapRenderer;
+        private GameObject characterSprite;
+        private GOFUS.Rendering.CharacterLayerRenderer characterRenderer;
+        private CameraController cameraController;
+        private GOFUS.Player.PlayerController playerController;
+
+        // Character data for sprite rendering
+        private int characterClassId = 1; // Default to Feca
+        private bool characterIsMale = true; // Default to male
+        private string characterName = "Player";
 
         // Combat Mode
         public CombatMode? CurrentCombatMode { get; private set; } = null;
@@ -106,6 +119,25 @@ namespace GOFUS.UI.Screens
             SetupMinimap();
             SetupQuickActionBar();
             SetupStatusEffectBars();
+            SetupMapRenderer();
+            SetupCamera();
+            SetupInputManager();
+        }
+
+        private void SetupInputManager()
+        {
+            // Add MapInputHandler to handle clicks that might be blocked by UI
+            var inputHandler = FindObjectOfType<GOFUS.Core.MapInputHandler>();
+            if (inputHandler == null)
+            {
+                GameObject inputObj = new GameObject("MapInputHandler");
+                inputHandler = inputObj.AddComponent<GOFUS.Core.MapInputHandler>();
+                Debug.Log("[GameHUD] MapInputHandler created to handle manual click detection");
+            }
+            else
+            {
+                Debug.Log("[GameHUD] MapInputHandler already exists in scene");
+            }
         }
 
         private void CreateHUDElements()
@@ -113,6 +145,14 @@ namespace GOFUS.UI.Screens
             // Create main HUD container
             GameObject hudContainer = new GameObject("HUD_Container");
             hudContainer.transform.SetParent(transform, false);
+
+            // Add RectTransform and anchor to top-left
+            RectTransform hudRect = hudContainer.AddComponent<RectTransform>();
+            hudRect.anchorMin = new Vector2(0, 1); // Top-left anchor
+            hudRect.anchorMax = new Vector2(0, 1); // Top-left anchor
+            hudRect.pivot = new Vector2(0, 1); // Top-left pivot
+            hudRect.anchoredPosition = Vector2.zero; // Position at anchor
+            hudRect.sizeDelta = new Vector2(300, 200); // Size for container
 
             // Health Bar
             CreateHealthBar(hudContainer.transform);
@@ -292,11 +332,252 @@ namespace GOFUS.UI.Screens
 
         #endregion
 
+        #region Map Rendering
+
+        private void SetupMapRenderer()
+        {
+            // Create MapRenderer GameObject in WORLD SPACE (not as UI child!)
+            GameObject mapRendererObj = new GameObject("MapRenderer");
+            // DON'T parent to UI transform - keep it in world space root
+            // This allows SpriteRenderers to work properly
+            mapRendererObj.transform.position = Vector3.zero;
+            mapRendererObj.transform.localScale = Vector3.one;
+
+            // Add MapRenderer component
+            mapRenderer = mapRendererObj.AddComponent<MapRenderer>();
+
+            // Store reference but don't parent it
+            // MapRenderer will create world space sprites that Camera.main will render
+
+            Debug.Log("[GameHUD] MapRenderer setup complete in World Space");
+        }
+
+        private void SetupCamera()
+        {
+            // Check if Main Camera exists, otherwise create one
+            Camera mapCamera = Camera.main;
+            GameObject cameraObj;
+
+            if (mapCamera == null)
+            {
+                // Create camera GameObject in WORLD SPACE
+                cameraObj = new GameObject("Main Camera");
+                cameraObj.tag = "MainCamera";
+                // DON'T parent to UI - keep in world space
+
+                // Add Camera component
+                mapCamera = cameraObj.AddComponent<Camera>();
+            }
+            else
+            {
+                cameraObj = mapCamera.gameObject;
+            }
+
+            // Configure camera for isometric/2D view
+            mapCamera.orthographic = true;
+            // Cells are now 200x100 (instead of 86x43), so we need a much larger camera view
+            // Increased from 15f to 35f to accommodate the larger sprites
+            mapCamera.orthographicSize = 35f; // Much larger to see all cells
+            mapCamera.clearFlags = CameraClearFlags.SolidColor;
+            mapCamera.backgroundColor = new Color(0.2f, 0.3f, 0.4f, 1f);
+
+            // Position camera to center on the isometric map
+            // For a 14x20 isometric grid with cell dimensions 200x100 pixels at 50 PPU
+            // The map center is roughly at the middle of all cells
+            // Calculate center based on grid dimensions
+            float centerX = 0; // Isometric grid centers around 0 on X
+            float centerY = (IsometricHelper.GRID_HEIGHT / 2) * IsometricHelper.CELL_HALF_HEIGHT;
+            mapCamera.transform.position = new Vector3(centerX, centerY, -10);
+            mapCamera.transform.rotation = Quaternion.identity; // No rotation for 2D
+
+            // Set depth to render before UI
+            mapCamera.depth = -1;
+
+            // Add CameraController for pan/zoom/drag
+            cameraController = cameraObj.GetComponent<CameraController>();
+            if (cameraController == null)
+            {
+                cameraController = cameraObj.AddComponent<CameraController>();
+            }
+
+            // Configure camera controller
+            cameraController.CurrentZoom = 35f;
+            cameraController.FollowTarget = false; // Start without following, will enable after character spawns
+
+            // Set bounds based on map size (approximate for 14x20 grid)
+            // X range: approximately -50 to 50
+            // Y range: approximately -20 to 50
+            cameraController.SetBounds(new Vector2(-50f, -20f), new Vector2(50f, 50f));
+
+            Debug.Log("[GameHUD] Camera setup complete with CameraController");
+        }
+
+        /// <summary>
+        /// Set character data (classId, gender, name) - should be called before SetCharacterCell
+        /// </summary>
+        public void SetCharacterData(int classId, bool isMale, string name = "Player")
+        {
+            characterClassId = classId;
+            characterIsMale = isMale;
+            characterName = name;
+            
+            Debug.Log($"[GameHUD] Character data set: Class {classId}, {(isMale ? "Male" : "Female")}, Name: {name}");
+            
+            // If character already exists, update it
+            if (characterRenderer != null)
+            {
+                characterRenderer.SetClass(classId, isMale);
+            }
+        }
+        
+        /// <summary>
+        /// Position character at the given cell ID and create character sprite if needed
+        /// </summary>
+        public void SetCharacterCell(int cellId)
+        {
+            CurrentCellId = cellId;
+
+            // Create character renderer if it doesn't exist
+            if (characterRenderer == null)
+            {
+                Debug.Log($"[GameHUD] Creating character renderer for class {characterClassId}");
+
+                // Use ClassSpriteManager to create proper character renderer (like CharacterRenderingTest does)
+                characterRenderer = GOFUS.UI.ClassSpriteManager.Instance.CreateCharacterRenderer(
+                    characterClassId,
+                    characterIsMale,
+                    mapRenderer != null ? mapRenderer.transform : null, // Parent to MapRenderer
+                    Vector3.zero // Initial position
+                );
+
+                if (characterRenderer != null)
+                {
+                    characterSprite = characterRenderer.gameObject;
+                    characterSprite.name = $"Character_{characterName}";
+
+                    // Set sorting order to render above map (map uses 0 to -40 range, so 100 is well above)
+                    characterRenderer.SetSortingOrder(100);
+
+                    // Scale character to be VERY visible (10x larger than default)
+                    // User requested much larger sprite for better visibility
+                    characterSprite.transform.localScale = Vector3.one * 10f;
+
+                    Debug.Log($"[GameHUD] Character renderer created successfully with {characterRenderer.LayerCount} layers (scale: 10x)");
+
+                    // Add PlayerController for movement
+                    playerController = characterSprite.AddComponent<GOFUS.Player.PlayerController>();
+                    playerController.Initialize(mapRenderer);
+
+                    Debug.Log("[GameHUD] PlayerController added and initialized");
+                }
+                else
+                {
+                    Debug.LogError("[GameHUD] Failed to create character renderer! ClassSpriteManager returned null");
+                    // Fallback to placeholder
+                    CreatePlaceholderCharacter();
+                }
+            }
+
+            // Position character at the cell
+            if (characterSprite != null)
+            {
+                Vector3 worldPos = IsometricHelper.CellIdToWorldPosition(cellId);
+                characterSprite.transform.position = worldPos; // CharacterLayerRenderer handles sprite offset internally
+
+                // Update PlayerController position if it exists
+                if (playerController != null)
+                {
+                    playerController.SetPosition(cellId);
+                }
+
+                Debug.Log($"[GameHUD] Character positioned at cell {cellId} -> world position {worldPos}");
+
+                // Set camera to follow character
+                if (cameraController != null)
+                {
+                    cameraController.Target = characterSprite.transform;
+                    cameraController.FollowTarget = true;
+                    cameraController.FocusOn(worldPos, immediate: true); // Start focused on character
+
+                    Debug.Log("[GameHUD] Camera set to follow character");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("[GameHUD] No character sprite to position!");
+            }
+        }
+        
+        /// <summary>
+        /// Fallback: Create a simple placeholder if ClassSpriteManager fails
+        /// </summary>
+        private void CreatePlaceholderCharacter()
+        {
+            characterSprite = new GameObject("CharacterPlaceholder");
+
+            if (mapRenderer != null)
+            {
+                characterSprite.transform.SetParent(mapRenderer.transform, false);
+            }
+
+            // Scale placeholder to match character size (10x for visibility)
+            characterSprite.transform.localScale = Vector3.one * 10f;
+
+            // Create a simple visible sprite
+            SpriteRenderer renderer = characterSprite.AddComponent<SpriteRenderer>();
+            renderer.color = Color.cyan;
+            renderer.sortingOrder = 100;
+            
+            // Create a larger, more visible diamond shape
+            Texture2D tex = new Texture2D(64, 64);
+            Color[] pixels = new Color[64 * 64];
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                int x = i % 64;
+                int y = i / 64;
+                float distance = Vector2.Distance(new Vector2(x, y), new Vector2(32, 32));
+                pixels[i] = distance < 24 ? new Color(1f, 0f, 1f, 1f) : Color.clear; // Bright magenta
+            }
+            tex.SetPixels(pixels);
+            tex.Apply();
+            
+            Sprite sprite = Sprite.Create(tex, new Rect(0, 0, 64, 64), new Vector2(0.5f, 0.5f), 16f); // Lower PPU for larger size
+            renderer.sprite = sprite;
+            
+            Debug.LogWarning("[GameHUD] Using placeholder character sprite");
+        }
+
+        #endregion
+
         #region Seamless Map Transitions
 
         public void SetCurrentMapId(int mapId)
         {
             CurrentMapId = mapId;
+        }
+        
+        /// <summary>
+        /// Load map and position character - convenience method called from CharacterSelectionScreen
+        /// </summary>
+        public void LoadMap(int mapId, int cellId)
+        {
+            Debug.Log($"[GameHUD] LoadMap called: mapId={mapId}, cellId={cellId}");
+            
+            // Set the map ID
+            SetCurrentMapId(mapId);
+            
+            // Load the map via MapRenderer
+            if (mapRenderer != null)
+            {
+                mapRenderer.LoadMapFromServer(mapId);
+            }
+            else
+            {
+                Debug.LogWarning("[GameHUD] MapRenderer is null! Map won't load.");
+            }
+            
+            // Position character at the cell
+            SetCharacterCell(cellId);
         }
 
         public void SetAdjacentMaps(int topMapId = -1, int bottomMapId = -1,

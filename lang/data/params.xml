@@ -1,0 +1,27 @@
+<config>
+
+	<!--- NOMBRE DEL SERVER -->
+	<name nameServer="SERVER NAME"/>
+
+	<!--- BOTONES Y TEXTOS DEL LOGIN -->
+	<objects object="_txtNroVersion" visible="true"/>
+	<objects object="_txtVersion" visible="true"/>
+	<objects object="_btnIconsSpells" visible="true"/>
+	<objects object="_btnSkinsItems" visible="true"/>
+	<objects object="_btnStyleCore" visible="true"/>
+	<objects object="_btnRegistrar" visible="true"/>
+
+	<!--- CONSTANTES DE LA CORE, DIRECTORIOS DE LOS CLIPS -->
+	<constants constant="SPELLS_ICONS_PATH_1" value="dofus1/" />
+	<constants constant="SPELLS_ICONS_PATH_2" value="dofus2/" />
+	<constants constant="BANNER_BOTON_LOTERIA" boolean="true" />
+	<constants constant="BANNER_BOTON_RECURSO" boolean="false" />
+	<constants constant="BANNER_BOTON_TACTICO" boolean="true" />
+	<constants constant="BANNER_BOTON_ANTI_LAG" boolean="true" />
+	<constants constant="BANNER_BOTON_CRIATURA" boolean="true" />
+	<constants constant="BANNER_BOTON_CLEAR_CHAT" boolean="true" />
+	<constants constant="BANNER_BOTON_OGRINAS" boolean="true" />
+	<globals global="SERVER_IP" value="127.0.0.1" />
+    <globals global="SERVER_PORT" number="7879" /> 
+
+</config>

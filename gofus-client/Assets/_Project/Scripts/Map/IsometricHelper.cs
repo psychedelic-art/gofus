@@ -14,8 +14,10 @@ namespace GOFUS.Map
         public const int GRID_HEIGHT_HALF = 20; // Double height for diamond shape
         public const float CELL_WIDTH = 86f;
         public const float CELL_HEIGHT = 43f;
-        public const float CELL_HALF_WIDTH = 43f;
-        public const float CELL_HALF_HEIGHT = 21.5f;
+        // Cell spacing for 200x100 pixel sprites at 50 PPU
+        // Reduced from 2.0/1.0 to 1.6/0.8 (20% overlap) to eliminate gaps between cells
+        public const float CELL_HALF_WIDTH = 1.6f;  // Was 2f - creates 20% overlap
+        public const float CELL_HALF_HEIGHT = 0.8f; // Was 1f - creates 20% overlap
         public const int TOTAL_CELLS = 560; // 14 * 20 * 2
 
         /// <summary>
@@ -108,15 +110,20 @@ namespace GOFUS.Map
             if (coords.x < 0 || coords.y < 0)
                 return neighbors;
 
-            // All 8 directions
+            // Diamond grid has 6 neighbors (not 8)
+            // In a diamond/staggered grid:
+            // - Even rows have even x (0, 2, 4, 6...)
+            // - Odd rows have odd x (1, 3, 5, 7...)
+            // - Horizontal neighbors are ±2 in x
+            // - Diagonal neighbors are ±1 in both x and y
             int[,] directions = new int[,]
             {
-                {-1, -1}, {0, -1}, {1, -1},
-                {-1, 0},           {1, 0},
-                {-1, 1},  {0, 1},  {1, 1}
+                {-2, 0},  {2, 0},     // left, right (horizontal)
+                {-1, -1}, {1, -1},    // upper-left, upper-right
+                {-1, 1},  {1, 1}      // lower-left, lower-right
             };
 
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < 6; i++)
             {
                 int newX = coords.x + directions[i, 0];
                 int newY = coords.y + directions[i, 1];

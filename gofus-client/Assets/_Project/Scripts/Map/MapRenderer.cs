@@ -127,6 +127,9 @@ namespace GOFUS.Map
             // Clear existing map
             ClearMap();
 
+            // Ensure layers are set up (Awake might not have run if dynamically created)
+            CreateLayers();
+
             // Initialize grid if needed
             if (grid == null)
                 InitializeGrid();
@@ -166,17 +169,73 @@ namespace GOFUS.Map
             StartCoroutine(LoadMapFromServerCoroutine(mapId));
         }
 
-        private IEnumerator LoadMapFromServerCoroutine(int mapId)
+        // Public coroutine method that can be started by GameHUD (to avoid inactive GameObject issues)
+        public IEnumerator LoadMapFromServerCoroutine(int mapId)
         {
             // Request map data from server
             string mapUrl = $"{NetworkManager.Instance.CurrentBackendUrl}/api/maps/{mapId}";
 
-            // In a real implementation, this would fetch from the server
-            // For now, create test map data
-            var testMap = CreateTestMap(mapId);
-            LoadMap(testMap);
+            Debug.Log($"[MapRenderer] Fetching map {mapId} from: {mapUrl}");
 
-            yield return null;
+            using (UnityEngine.Networking.UnityWebRequest request = UnityEngine.Networking.UnityWebRequest.Get(mapUrl))
+            {
+                // Send the request
+                yield return request.SendWebRequest();
+
+                // Check for errors
+                if (request.result == UnityEngine.Networking.UnityWebRequest.Result.ConnectionError ||
+                    request.result == UnityEngine.Networking.UnityWebRequest.Result.ProtocolError)
+                {
+                    Debug.LogError($"[MapRenderer] Failed to load map {mapId}: {request.error}");
+                    Debug.LogWarning($"[MapRenderer] Falling back to test map for map {mapId}");
+
+                    // Fallback to test map
+                    var testMap = CreateTestMap(mapId);
+                    LoadMap(testMap);
+                }
+                else
+                {
+                    // Successfully loaded from server
+                    try
+                    {
+                        string json = request.downloadHandler.text;
+                        Debug.Log($"[MapRenderer] Received response: {json.Substring(0, Mathf.Min(200, json.Length))}...");
+
+                        // Parse the backend response - backend returns { success, map }
+                        GOFUS.Models.MapApiResponse apiResponse = JsonUtility.FromJson<GOFUS.Models.MapApiResponse>(json);
+
+                        if (apiResponse != null && apiResponse.success && apiResponse.map != null && apiResponse.map.cells != null)
+                        {
+                            Debug.Log($"[MapRenderer] API response success: {apiResponse.success}, cells: {apiResponse.map.cells.Length}");
+
+                            // Convert backend format to Unity format
+                            MapData mapData = GOFUS.Models.MapDataConverter.ToUnityMapData(apiResponse.map);
+
+                            if (mapData != null)
+                            {
+                                Debug.Log($"[MapRenderer] Successfully converted map {mapId} with {mapData.Cells.Length} cells");
+                                LoadMap(mapData);
+                            }
+                            else
+                            {
+                                Debug.LogError("[MapRenderer] Conversion failed, using test map");
+                                LoadMap(CreateTestMap(mapId));
+                            }
+                        }
+                        else
+                        {
+                            Debug.LogError("[MapRenderer] Invalid response format, using test map");
+                            LoadMap(CreateTestMap(mapId));
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogError($"[MapRenderer] Exception parsing map data: {e.Message}");
+                        Debug.LogWarning($"[MapRenderer] Falling back to test map");
+                        LoadMap(CreateTestMap(mapId));
+                    }
+                }
+            }
         }
 
         private MapData CreateTestMap(int mapId)
@@ -209,10 +268,33 @@ namespace GOFUS.Map
 
         private void GenerateMapVisuals()
         {
+            Debug.Log($"[MapRenderer] Generating visuals for {grid.Cells.Length} cells");
+            Debug.Log($"[MapRenderer] Ground Layer: {(groundLayer != null ? "EXISTS" : "NULL")}");
+            Debug.Log($"[MapRenderer] Object Layer: {(objectLayer != null ? "EXISTS" : "NULL")}");
+            Debug.Log($"[MapRenderer] Highlight Layer: {(highlightLayer != null ? "EXISTS" : "NULL")}");
+            
+            int walkableCount = 0;
+            int obstacleCount = 0;
+            
             for (int i = 0; i < grid.Cells.Length; i++)
             {
                 CreateCellVisual(i);
+                
+                if (grid.Cells[i].IsWalkable)
+                    walkableCount++;
+                else
+                    obstacleCount++;
+                
+                // Log first few cells for debugging
+                if (i < 5)
+                {
+                    Vector3 pos = IsometricHelper.CellIdToWorldPosition(i);
+                    Debug.Log($"[MapRenderer] Cell {i} at position {pos}, walkable: {grid.Cells[i].IsWalkable}");
+                }
             }
+            
+            Debug.Log($"[MapRenderer] Created {cellVisuals.Count} cell visuals ({walkableCount} walkable, {obstacleCount} obstacles)");
+            Debug.Log($"[MapRenderer] Map bounds approximately: X(-817 to 559), Y(0 to 688) world units");
 
             // Create map objects
             foreach (var kvp in mapObjects)
@@ -231,26 +313,58 @@ namespace GOFUS.Map
             cellObject.transform.parent = groundLayer;
             cellObject.transform.position = worldPos;
 
-            // Set material based on walkability
+            // Log creation details for debugging
+            if (cellId < 10 || cellId % 100 == 0)
+            {
+                Debug.Log($"[MapRenderer] Creating cell {cellId} at {worldPos}");
+            }
+
+            // Set visual properties
             var renderer = cellObject.GetComponent<SpriteRenderer>();
             if (renderer != null)
             {
-                renderer.material = grid.Cells[cellId].IsWalkable ? normalCellMaterial : obstacleCellMaterial;
-                renderer.sortingOrder = GetSortingOrder(cellId);
-
-                // Set color based on cell type
-                switch (grid.Cells[cellId].Type)
+                // Don't set material if null - use default material
+                if (normalCellMaterial != null && obstacleCellMaterial != null)
                 {
-                    case CellType.Water:
-                        renderer.color = new Color(0.5f, 0.7f, 1f, 0.8f);
-                        break;
-                    case CellType.Lava:
-                        renderer.color = new Color(1f, 0.3f, 0.1f, 0.8f);
-                        break;
-                    default:
-                        renderer.color = Color.white;
-                        break;
+                    renderer.material = grid.Cells[cellId].IsWalkable ? normalCellMaterial : obstacleCellMaterial;
                 }
+                
+                renderer.sortingOrder = GetSortingOrder(cellId);
+                renderer.sortingLayerName = "Default"; // Ensure on correct sorting layer
+
+                // Set color based on cell type and walkability
+                if (!grid.Cells[cellId].IsWalkable)
+                {
+                    renderer.color = new Color(0.5f, 0.5f, 0.5f, 0.9f); // Dark gray for obstacles
+                }
+                else
+                {
+                    switch (grid.Cells[cellId].Type)
+                    {
+                        case CellType.Water:
+                            renderer.color = new Color(0.5f, 0.7f, 1f, 0.8f);
+                            break;
+                        case CellType.Lava:
+                            renderer.color = new Color(1f, 0.3f, 0.1f, 0.8f);
+                            break;
+                        default:
+                            renderer.color = new Color(0.9f, 0.9f, 0.9f, 0.8f); // Light gray for walkable
+                            break;
+                    }
+                }
+                
+                // Log sprite details for first cell
+                if (cellId == 0)
+                {
+                    Debug.Log($"[MapRenderer] Cell 0 sprite: {(renderer.sprite != null ? "EXISTS" : "NULL")}");
+                    Debug.Log($"[MapRenderer] Cell 0 color: {renderer.color}");
+                    Debug.Log($"[MapRenderer] Cell 0 sorting order: {renderer.sortingOrder}");
+                    Debug.Log($"[MapRenderer] Cell 0 sorting layer: {renderer.sortingLayerName}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[MapRenderer] No SpriteRenderer on cell {cellId}!");
             }
 
             // Add cell interaction
@@ -444,37 +558,52 @@ namespace GOFUS.Map
         private void ClearMap()
         {
             // Clear visual objects
-            foreach (var kvp in cellVisuals)
+            if (cellVisuals != null)
             {
-                if (kvp.Value != null)
-                    Destroy(kvp.Value);
+                foreach (var kvp in cellVisuals)
+                {
+                    if (kvp.Value != null)
+                        Destroy(kvp.Value);
+                }
+                cellVisuals.Clear();
             }
-            cellVisuals.Clear();
 
-            foreach (var kvp in highlightVisuals)
+            if (highlightVisuals != null)
             {
-                if (kvp.Value != null)
-                    Destroy(kvp.Value);
+                foreach (var kvp in highlightVisuals)
+                {
+                    if (kvp.Value != null)
+                        Destroy(kvp.Value);
+                }
+                highlightVisuals.Clear();
             }
-            highlightVisuals.Clear();
 
-            mapObjects.Clear();
+            if (mapObjects != null)
+            {
+                mapObjects.Clear();
+            }
         }
 
         private void HandleCellClick(int cellId)
         {
+            Debug.Log($"[MapRenderer] HandleCellClick called for cell {cellId}");
+            Debug.Log($"[MapRenderer] OnCellClicked has {(OnCellClicked != null ? OnCellClicked.GetInvocationList().Length : 0)} subscribers");
             OnCellClicked?.Invoke(cellId);
         }
 
         private void HandleCellHover(int cellId)
         {
+            Debug.Log($"[MapRenderer] HandleCellHover called for cell {cellId}");
             OnCellHovered?.Invoke(cellId);
         }
 
         private Sprite CreateDiamondSprite()
         {
-            // Create a diamond-shaped sprite programmatically
-            Texture2D texture = new Texture2D(86, 43, TextureFormat.RGBA32, false);
+            // Create a diamond-shaped sprite programmatically with MUCH LARGER size
+            // Increased from 86x43 to 200x100 for better visibility
+            int width = 200;
+            int height = 100;
+            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
             Color[] pixels = new Color[texture.width * texture.height];
 
             // Fill with transparent
@@ -497,15 +626,25 @@ namespace GOFUS.Map
                     if (distX + distY * 2 <= 1)
                     {
                         int index = y * texture.width + x;
-                        pixels[index] = new Color(0.8f, 0.8f, 0.8f, 0.5f);
+                        // Make cells VERY visible: bright and opaque
+                        pixels[index] = new Color(1f, 1f, 1f, 1f); // Pure white, fully opaque
+                        
+                        // Add thick border for visibility
+                        if (distX + distY * 2 >= 0.85f)
+                        {
+                            pixels[index] = new Color(0f, 0f, 0f, 1.0f); // Black border
+                        }
                     }
                 }
             }
 
             texture.SetPixels(pixels);
             texture.Apply();
+            texture.filterMode = FilterMode.Point; // Crisp edges
 
-            return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f));
+            // Pixels per unit determines the size in world space
+            // Lower value = larger sprite in world
+            return Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 50f);
         }
 
         private void OnDestroy()
@@ -522,12 +661,28 @@ namespace GOFUS.Map
 
         private void OnMouseDown()
         {
-            OnClick?.Invoke(CellId);
+            Debug.Log($"[CellClickHandler] Cell {CellId} clicked via OnMouseDown!");
+            TriggerClick();
         }
 
         private void OnMouseEnter()
         {
+            Debug.Log($"[CellClickHandler] Mouse entered cell {CellId}");
             OnHover?.Invoke(CellId);
+        }
+
+        private void OnMouseExit()
+        {
+            Debug.Log($"[CellClickHandler] Mouse exited cell {CellId}");
+        }
+
+        /// <summary>
+        /// Manually trigger a click event (for testing or programmatic clicks)
+        /// </summary>
+        public void TriggerClick()
+        {
+            Debug.Log($"[CellClickHandler] TriggerClick() called for cell {CellId}");
+            OnClick?.Invoke(CellId);
         }
     }
 }
